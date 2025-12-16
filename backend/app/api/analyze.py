@@ -23,5 +23,5 @@ async def analyze_url(payload:dict):
         "status": page_data["status_code"],
         "load_time": page_data["load_time"],
         "size_bytes": page_data["size_bytes"],
-        "title": page_data["title"]
+        "html": page_data["html"],
     }
