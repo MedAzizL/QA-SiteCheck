@@ -1,17 +1,27 @@
 from fastapi import APIRouter , HTTPException  
-from app.utils.validators import is_valid_url, url_exists , normalize_url
+from app.utils.validators import is_valid_url , normalize_url
+from app.services.FetcherService import  FetcherService 
 router = APIRouter()
 @router.post("/analyze")
-def analyze_url(payload:dict):
+async def analyze_url(payload:dict):
     url = payload.get("url")
     if not url :
         raise HTTPException(status_code=400, detail="URL is required")
     
     url=normalize_url(url)
 
-    if not is_valid_url(url) or not url_exists(url):
-        raise HTTPException(status_code=400, detail="URL is not reachable")
 
-    return {"url": url, "status": "valid"}
+    if not is_valid_url(url) :
+        raise HTTPException(status_code=400, detail="Invalid URL format")
+
+    fetcher=FetcherService()
+    page_data= await fetcher.fetch(url)
 
 
+    return {
+        "url": url,
+        "status": page_data["status_code"],
+        "load_time": page_data["load_time"],
+        "size_bytes": page_data["size_bytes"],
+        "title": page_data["title"]
+    }
