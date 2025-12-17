@@ -1,6 +1,8 @@
 from app.services.FetcherService import FetcherService
 from app.services.HTMLBugsService import HTMLBugsService
 from app.services.AccessibilityService import AccessibilityService
+from app.services.PerformanceService import PerformanceService 
+
 from typing import Dict, Any
 
 class OrchestratorService:
@@ -11,6 +13,7 @@ class OrchestratorService:
         self.fetcher = FetcherService()
         self.html_service = HTMLBugsService()
         self.accessibility_service = AccessibilityService()
+        self.performance_service = PerformanceService()
     
     async def analyze_url(self, url: str) -> Dict[str, Any]:
         # Fetch the page (never raises exceptions)
@@ -38,6 +41,16 @@ class OrchestratorService:
         # Analyze HTML for bugs
         html_bugs = self.html_service.analyze(page_data["html"])
         accessibility_issues = self.accessibility_service.analyze(page_data["soup"])
+        performance = {
+                    "available": False,
+                    "message": "Skipped",
+                    "source": "Google PageSpeed Insights",
+                    }
+
+        if not page_data.get("error"):
+            performance = await self.performance_service.analyze(
+                page_data["final_url"]
+            )
 
         
         # Return full QA result
@@ -55,5 +68,6 @@ class OrchestratorService:
             "forms_count": len(page_data["forms"]),
             "html": page_data["html"],
             "html_bugs": html_bugs,
-            "accessibility_issues": accessibility_issues
+            "accessibility_issues": accessibility_issues,
+            "performance": performance
         }
