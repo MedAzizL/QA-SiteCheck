@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from playwright.async_api import async_playwright
 
 from app.api.analyze import router as analyze_router
-from app.browser import set_browser
+from app.browser import set_browser, get_browser
 from app.config import (
     GOOGLE_PAGESPEED_API_KEY,
     VIRUSTOTAL_API_KEY,
@@ -12,7 +12,7 @@ from app.config import (
 
 app = FastAPI(title="QA Site Check")
 
-# CORS
+# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -24,12 +24,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Playwright lifecycle ----------
+# ---------------- PLAYWRIGHT ----------------
 @app.on_event("startup")
 async def startup_event():
     try:
         print("🚀 Starting Playwright browser...")
         pw = await async_playwright().start()
+
         browser = await pw.chromium.launch(
             headless=True,
             args=[
@@ -37,27 +38,29 @@ async def startup_event():
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
+                "--single-process",
             ],
         )
+
         set_browser(browser)
         print("✅ Playwright browser ready")
+
     except Exception as e:
+        # This is EXPECTED on some Render instances
         print(f"⚠️ Playwright disabled, using HTTP fallback only: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    from app.browser import get_browser
     browser = get_browser()
     if browser:
         await browser.close()
-        print("🛑 Browser closed")
+        print("🛑 Playwright browser closed")
 
-# ---------- Routes ----------
+# ---------------- ROUTES ----------------
 app.include_router(analyze_router)
 
 @app.get("/health")
 def health_check():
-    from app.browser import get_browser
     return {
         "status": "ok",
         "browser_active": get_browser() is not None,
