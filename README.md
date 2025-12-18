@@ -64,3 +64,10 @@ GOOGLE_PAGESPEED_API_KEY=
 VIRUSTOTAL_API_KEY=  
 ANTHROPIC_API_KEY=  
 
+---
+
+## Environment Variables (Frontend)
+
+Create a `.env` file in `frontend/` from `.env.example` if you need to override the API base URL:
+
+VITE_API_BASE=http://localhost:8000
