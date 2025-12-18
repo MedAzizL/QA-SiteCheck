@@ -32,7 +32,8 @@ class FetcherService:
                 
                 # Last attempt - return error response
                 if attempt == self.max_retries:
-                    return self._create_error_response(url, 'fetch_failed', error_str)
+                    print("⚠️ Playwright failed — using HTTP fallback")
+                    return await self._http_fallback(url, error_str)
                 
                 # Retry with exponential backoff
                 wait_time = 2 ** attempt
@@ -72,6 +73,8 @@ class FetcherService:
             'error_message': error_message
         }
 
+
+    
     async def _fetch_attempt(self, url: str) -> Dict[str, Any]:
         """Single fetch attempt with stealth configuration"""
         start_time = time.time()
@@ -221,3 +224,72 @@ class FetcherService:
             if name and content:
                 meta_tags[name] = content
         return meta_tags
+    
+    async def _http_fallback(self, url: str, error: str):
+        """
+        HTTP fallback when Playwright is blocked (Render / bot-protected sites).
+        Keeps analysis functional instead of returning 0 scores.
+        """
+        import httpx
+        import time
+        from bs4 import BeautifulSoup
+        from urllib.parse import urlparse
+
+        start_time = time.time()
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=20.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    )
+                }
+            ) as client:
+                response = await client.get(url)
+
+            html = response.text
+            soup = BeautifulSoup(html, "html.parser")
+            final_url = str(response.url)
+            parsed = urlparse(final_url)
+
+            return {
+                "url": url,
+                "final_url": final_url,
+                "html": html,
+                "soup": soup,
+                "status_code": response.status_code,
+                "load_time": round(time.time() - start_time, 2),
+                "size_bytes": len(response.content),
+                "is_https": parsed.scheme == "https",
+                "domain": parsed.netloc,
+                "title": soup.title.string if soup.title else None,
+                "meta_tags": self._extract_meta_tags(soup),
+                "images": soup.find_all("img"),
+                "links": soup.find_all("a"),
+                "forms": soup.find_all("form"),
+                "scripts": soup.find_all("script"),
+                "stylesheets": soup.find_all("link", rel="stylesheet"),
+                "headings": {
+                    "h1": soup.find_all("h1"),
+                    "h2": soup.find_all("h2"),
+                    "h3": soup.find_all("h3"),
+                    "h4": soup.find_all("h4"),
+                    "h5": soup.find_all("h5"),
+                    "h6": soup.find_all("h6"),
+                },
+                "error": False,
+                "error_type": None,
+                "error_message": None,
+                "note": "HTTP fallback used (Playwright blocked)"
+            }
+
+        except Exception as e:
+            return self._create_error_response(
+                url,
+                "fetch_failed",
+                f"HTTP fallback failed: {str(e)}"
+            )
