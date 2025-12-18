@@ -1,8 +1,14 @@
-from fastapi import APIRouter , HTTPException  
+from fastapi import APIRouter , HTTPException , Response
 from app.utils.validators import is_valid_url , normalize_url
 from app.services.OrchestratorService import OrchestratorService
 router = APIRouter()
 orchestrator = OrchestratorService()
+
+
+@router.options("/analyze")
+def analyze_options():
+    return Response(status_code=200)
+
 
 @router.post("/analyze")
 async def analyze_url(payload:dict):
