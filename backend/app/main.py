@@ -14,7 +14,8 @@ app = FastAPI(title="QA Site Check")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
+        "http://localhost:5173", 
+        "https://qa-sitecheck-frontend.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
