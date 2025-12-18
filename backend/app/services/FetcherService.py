@@ -1,4 +1,4 @@
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from app.browser import get_browser
 from typing import Dict, Any
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
@@ -75,145 +75,80 @@ class FetcherService:
 
 
     
+    
+
     async def _fetch_attempt(self, url: str) -> Dict[str, Any]:
-        """Single fetch attempt with stealth configuration"""
         start_time = time.time()
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-dev-shm-usage',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process'
-                ]
-            )
-            
+        browser = get_browser()
+
+        # 1️⃣ If browser unavailable → HTTP fallback
+        if not browser:
+            return await self._http_fallback(url, "Browser not initialized")
+
+        try:
             context = await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                locale='en-US',
-                timezone_id='America/New_York',
-                permissions=['geolocation'],
-                extra_http_headers={
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Cache-Control': 'max-age=0'
-                }
+                viewport={"width": 1920, "height": 1080},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
             )
-            
+
             page = await context.new_page()
 
-            # Stealth JavaScript
-            await page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-                
-                window.chrome = {
-                    runtime: {},
-                    loadTimes: function() {},
-                    csi: function() {},
-                    app: {}
-                };
-                
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => {
-                        return [
-                            {
-                                description: "Portable Document Format",
-                                filename: "internal-pdf-viewer",
-                                name: "Chrome PDF Plugin"
-                            },
-                            {
-                                description: "Portable Document Format",
-                                filename: "internal-pdf-viewer",
-                                name: "Chrome PDF Viewer"
-                            },
-                            {
-                                description: "Portable Document Format",
-                                filename: "internal-pdf-viewer", 
-                                name: "WebKit built-in PDF"
-                            }
-                        ];
-                    }
-                });
-                
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['en-US', 'en']
-                });
-                
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                        Promise.resolve({ state: Notification.permission }) :
-                        originalQuery(parameters)
-                );
-                
-                Object.defineProperty(navigator, 'platform', {
-                    get: () => 'Win32'
-                });
-            """)
+            response = await page.goto(
+                url,
+                timeout=self.timeout * 1000,
+                wait_until="domcontentloaded",
+            )
 
+            await page.wait_for_timeout(2000)
+
+            html = await page.content()
+            load_time = round(time.time() - start_time, 2)
+
+            soup = BeautifulSoup(html, "html.parser")
+
+            return {
+                "url": url,
+                "final_url": page.url,
+                "html": html,
+                "soup": soup,
+                "status_code": response.status if response else 0,
+                "load_time": load_time,
+                "size_bytes": len(html.encode("utf-8")),
+                "is_https": urlparse(url).scheme == "https",
+                "domain": urlparse(url).netloc,
+                "title": soup.title.string if soup.title else None,
+                "meta_tags": self._extract_meta_tags(soup),
+                "images": soup.find_all("img"),
+                "links": soup.find_all("a"),
+                "forms": soup.find_all("form"),
+                "scripts": soup.find_all("script"),
+                "stylesheets": soup.find_all("link", rel="stylesheet"),
+                "headings": {
+                    "h1": soup.find_all("h1"),
+                    "h2": soup.find_all("h2"),
+                    "h3": soup.find_all("h3"),
+                    "h4": soup.find_all("h4"),
+                    "h5": soup.find_all("h5"),
+                    "h6": soup.find_all("h6"),
+                },
+                "error": False,
+                "mode": "playwright",
+            }
+
+        except Exception as e:
+            return await self._http_fallback(url, str(e))
+
+        finally:
             try:
-                response = await page.goto(
-                    url, 
-                    timeout=self.timeout * 1000,
-                    wait_until='domcontentloaded'
-                )
-
-                await page.wait_for_timeout(2000)
-
-                load_time = time.time() - start_time
-                html = await page.content()
-                status_code = response.status if response else 0
-                final_url = page.url
-
-                soup = BeautifulSoup(html, 'html.parser')
-
-                page_data = {
-                    'url': url,
-                    'final_url': final_url,
-                    'html': html,
-                    'soup': soup,
-                    'status_code': status_code,
-                    'load_time': round(load_time, 2),
-                    'size_bytes': len(html.encode('utf-8')),
-                    'is_https': urlparse(url).scheme == 'https',
-                    'domain': urlparse(url).netloc,
-                    'title': soup.title.string if soup.title else None,
-                    'meta_tags': self._extract_meta_tags(soup),
-                    'images': soup.find_all('img'),
-                    'links': soup.find_all('a'),
-                    'forms': soup.find_all('form'),
-                    'scripts': soup.find_all('script'),
-                    'stylesheets': soup.find_all('link', rel='stylesheet'),
-                    'headings': {
-                        'h1': soup.find_all('h1'),
-                        'h2': soup.find_all('h2'),
-                        'h3': soup.find_all('h3'),
-                        'h4': soup.find_all('h4'),
-                        'h5': soup.find_all('h5'),
-                        'h6': soup.find_all('h6')
-                    },
-                    'error': False
-                }
-
-                return page_data
-
-            finally:
+                await page.close()
                 await context.close()
-                await browser.close()
+            except Exception:
+                pass
+
 
     def _extract_meta_tags(self, soup: BeautifulSoup) -> Dict[str, str]:
         """Extract meta tags from HTML"""
