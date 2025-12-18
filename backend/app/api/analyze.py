@@ -5,9 +5,6 @@ router = APIRouter()
 orchestrator = OrchestratorService()
 
 
-@router.options("/analyze")
-def analyze_options():
-    return Response(status_code=200)
 
 
 @router.post("/analyze")
