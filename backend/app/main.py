@@ -1,22 +1,16 @@
 from fastapi import FastAPI
-from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
-import os
-
-# Load .env file BEFORE importing any services
-load_dotenv()
-
-# Debug: Verify API key is loaded
-api_key = os.getenv("GOOGLE_PAGESPEED_API_KEY")
-if api_key:
-    print(f"✓ API Key loaded: {api_key[:10]}...{api_key[-4:]}")
-else:
-    print("✗ No API key found in environment!")
+from app.config import (
+    GOOGLE_PAGESPEED_API_KEY,
+    VIRUSTOTAL_API_KEY,
+    ANTHROPIC_API_KEY,
+)
 
 from app.api.analyze import router as analyze_router
 
 app = FastAPI(title="QA Site Check")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -26,19 +20,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.include_router(analyze_router)
+
 
 @app.get("/health")
 def health_check():
+    """
+    Safe health endpoint.
+    NEVER exposes secrets.
+    """
     return {
         "status": "ok",
-        "api_key_configured": bool(api_key)
+        "pagespeed_configured": bool(GOOGLE_PAGESPEED_API_KEY),
+        "virustotal_configured": bool(VIRUSTOTAL_API_KEY),
+        "ai_configured": bool(ANTHROPIC_API_KEY),
     }
+
 
 @app.get("/")
 def root():
     return {
         "message": "QA Site Check API",
         "version": "1.0.0",
-        "api_key_configured": bool(api_key)
     }

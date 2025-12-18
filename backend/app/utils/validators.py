@@ -1,5 +1,4 @@
 from urllib.parse import urlparse
-import requests
 
 
 def is_valid_url(url: str) -> bool:
@@ -12,7 +11,12 @@ def is_valid_url(url: str) -> bool:
 def normalize_url(url: str) -> str:
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
-    return url       
+
+    # Force www prefix if missing
+   
+
+    return url
+    
 
 
     

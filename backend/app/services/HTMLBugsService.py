@@ -1,7 +1,6 @@
 import requests
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
-import html5lib
 import re
 
 

@@ -1,6 +1,13 @@
 fastapi
-uvicorn
+uvicorn[standard]
+
+python-dotenv
+
+requests
+httpx
+
 beautifulsoup4
-pydantic
-asyncio
+html5lib
+
 playwright
+
